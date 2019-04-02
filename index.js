@@ -35,7 +35,8 @@ module.exports = function ProgressBarPlugin(options = {}) {
   let running = false;
   let startTime = 0;
   let lastPercent = 0;
-  let interval;
+  let shouldUpdate = false;
+  let interval = setInterval(()=> shouldUpdate = true, updateAfter);
 
   return new webpack.ProgressPlugin(((percent, msg) => {
     if (!running && lastPercent !== 0 && !customSummary) {
@@ -44,17 +45,15 @@ module.exports = function ProgressBarPlugin(options = {}) {
 
     const newPercent = Math.floor(percent * barOptions.width);
 
-    if (lastPercent < newPercent || newPercent === 0) {
+    if (lastPercent < newPercent || newPercent === 0 || shouldUpdate === true) {
+      if (shouldUpdate) {
+          shouldUpdate = false;
+      }
       bar.update(percent, {
         msg,
       });
       lastPercent = newPercent;
-      if (interval && interval.clearInterval) {
-        interval.clearInterval();
-      }
-      if (updateAfter) {
-        interval = setInterval(() => bar.update(percent, { msg }), updateAfter);
-      }
+
     }
 
     if (!running) {
@@ -66,6 +65,7 @@ module.exports = function ProgressBarPlugin(options = {}) {
       const buildTime = `${(now - startTime) / 1000}s`;
 
       bar.terminate();
+      clearInterval(interval);
 
       if (summary) {
         stream.write(chalk.green.bold(`Build completed in ${buildTime}\n\n`));
