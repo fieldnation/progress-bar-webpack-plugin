@@ -1,75 +1,76 @@
-var ProgressBar = require('progress');
-var chalk = require('chalk');
-var webpack = require('webpack');
+const ProgressBar = require('progress');
+const chalk = require('chalk');
+const webpack = require('webpack');
+
+const noop = () => {};
 
 require('object.assign').shim();
 
-module.exports = function ProgressBarPlugin(options) {
-  options = options || {};
-
-  var stream = options.stream || process.stderr;
-  var enabled = stream && stream.isTTY;
+module.exports = function ProgressBarPlugin(options = {}) {
+  const stream = options.stream || process.stderr;
+  const enabled = stream && stream.isTTY;
 
   if (!enabled) {
-    return function () {};
+    return noop;
   }
 
-  var barLeft = chalk.bold('[');
-  var barRight = chalk.bold(']');
-  var preamble = chalk.cyan.bold('  build ') + barLeft;
-  var barFormat = options.format || preamble + ':bar' + barRight + chalk.green.bold(' :percent');
-  var summary = options.summary !== false;
-  var summaryContent = options.summaryContent;
-  var customSummary = options.customSummary;
+  const barLeft = chalk.bold('[');
+  const barRight = chalk.bold(']');
+  const preamble = chalk.cyan.bold('  build ') + barLeft;
+  const barFormat = options.format || `${preamble}:bar${barRight}${chalk.green.bold(' :percent')}`;
+  const {
+    format, total, summary, summaryContent, customSummary, updateAfter, ...opts
+  } = options;
 
-  delete options.format;
-  delete options.total;
-  delete options.summary;
-  delete options.summaryContent;
-  delete options.customSummary;
-
-  var barOptions = Object.assign({
+  const barOptions = Object.assign({
     complete: '=',
     incomplete: ' ',
     width: 20,
     total: 100,
-    clear: true
-  }, options);
+    clear: true,
+  }, opts);
 
-  var bar = new ProgressBar(barFormat, barOptions);
+  const bar = new ProgressBar(barFormat, barOptions);
 
-  var running = false;
-  var startTime = 0;
-  var lastPercent = 0;
+  let running = false;
+  let startTime = 0;
+  let lastPercent = 0;
+  let interval;
 
-  return new webpack.ProgressPlugin(function (percent, msg) {
+  return new webpack.ProgressPlugin(((percent, msg) => {
     if (!running && lastPercent !== 0 && !customSummary) {
       stream.write('\n');
     }
 
-    var newPercent = Math.floor(percent * barOptions.width);
+    const newPercent = Math.floor(percent * barOptions.width);
 
     if (lastPercent < newPercent || newPercent === 0) {
       bar.update(percent, {
-        msg: msg
+        msg,
       });
       lastPercent = newPercent;
+      if (interval && interval.clearInterval) {
+        interval.clearInterval();
+      }
+      if (updateAfter) {
+        interval = setInterval(() => bar.update(percent, { msg }), updateAfter);
+      }
     }
 
     if (!running) {
       running = true;
-      startTime = new Date;
+      startTime = new Date();
       lastPercent = 0;
     } else if (percent === 1) {
-      var now = new Date;
-      var buildTime = (now - startTime) / 1000 + 's';
+      const now = new Date();
+      const buildTime = `${(now - startTime) / 1000}s`;
 
       bar.terminate();
 
       if (summary) {
-        stream.write(chalk.green.bold('Build completed in ' + buildTime + '\n\n'));
+        stream.write(chalk.green.bold(`Build completed in ${buildTime}\n\n`));
       } else if (summaryContent) {
-        stream.write(summaryContent + '(' + buildTime + ')\n\n');
+        stream.write(`${summaryContent}(${buildTime})\n\n`);
       }
 
       if (customSummary) {
@@ -78,5 +79,5 @@ module.exports = function ProgressBarPlugin(options) {
 
       running = false;
     }
-  });
+  }));
 };
